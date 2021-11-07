@@ -48,4 +48,6 @@ func Login(ctx *gin.Context) {
 		resp.Fail(ctx, http.StatusInternalServerError, err)
 		return
 	}
+
+	resp.Ok(ctx, user)
 }

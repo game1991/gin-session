@@ -3,6 +3,7 @@ package middlerware
 import (
 	"demo/models"
 	"demo/resp"
+	"encoding/gob"
 	"log"
 	"net/http"
 
@@ -14,13 +15,18 @@ import (
 	"github.com/gorilla/securecookie"
 )
 
+func init() {
+	gob.Register(&models.User{})
+}
+
+// Session 中间件
 func Session() gin.HandlerFunc {
 	store, err := redis.NewStoreWithDB(
 		50,               //最大连接空闲数
 		"tcp",            //网络方式
 		"localhost:6379", //连接地址
 		"",               //密码
-		"",               //DB库号
+		"0",              //DB库号
 		[]byte("secret"), // 密匙
 	)
 	if err != nil {
@@ -44,7 +50,6 @@ func Session() gin.HandlerFunc {
 }
 
 // SessionCheck 登录检查
-
 func SessionCheck(ctx *gin.Context) {
 	sess := sessions.Default(ctx)
 	u := sess.Get("user")
@@ -58,4 +63,6 @@ func SessionCheck(ctx *gin.Context) {
 		return
 	}
 	ctx.Set("user", user)
+	// 如果需要将session时长续期，可以调用 sess.Flashs()和sess.Save()，或者调用sess.Options(&sessions.Options{MaxAge = ?})和sess.Save()
+	// 需要注意的是如果需要续期并且用户id与sessionid有关联，请调用sess.SaveUser()对用户id关联绑定续期。
 }

@@ -25,7 +25,7 @@ func (s *RedisStore) Save(r *http.Request, w http.ResponseWriter, sess *gs.Sessi
 
 	oldMaxAge := sess.Options.MaxAge
 	if oldMaxAge != -1 {
-		//为了浏览器退出cookie时效 加的logic
+		//为了浏览器退出cookie时效 加的logic,当设置cookie的maxage=0时，可以实现关闭浏览器清楚cookie的效果。
 		sess.Options.MaxAge = 0
 		encoded, _ := securecookie.EncodeMulti(sess.Name(), sess.ID, s.Pairs...)
 		w.Header().Set("Set-Cookie", gs.NewCookie(sess.Name(), encoded, sess.Options).String())
@@ -37,6 +37,5 @@ func (s *RedisStore) Save(r *http.Request, w http.ResponseWriter, sess *gs.Sessi
 
 // Get Get
 func (s *RedisStore) Get(r *http.Request, name string) (*gs.Session, error) {
-
 	return gs.GetRegistry(r).Get(s, name)
 }

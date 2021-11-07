@@ -73,28 +73,25 @@ type Session struct {
 // SaveUser 保存用户id到DB
 func (s *Session) SaveUser(openID string) error {
 	defer utils.Def()
-	if s.Written() {
-		if store, ok := s.store.(*RedisStore); ok {
-			// 用户id信息绑定到session并且存到redis
-			conn := store.RedisStore.Pool.Get()
-			defer conn.Close()
-			if err := conn.Err(); err != nil {
-				return err
-			}
-
-			age := s.Session().Options.MaxAge
-			if age == 0 {
-				age = store.RedisStore.DefaultMaxAge
-			}
-			_, err := conn.Do("SETEX", openID, age, s.Session().ID)
-			if err != nil {
-				return err
-			}
+	if store, ok := s.store.(*RedisStore); ok {
+		// 用户id信息绑定到session并且存到redis
+		conn := store.RedisStore.Pool.Get()
+		defer conn.Close()
+		if err := conn.Err(); err != nil {
+			return err
 		}
 
-		return errors.New("SaveUser store类型错误，应为RedisStore")
+		age := s.Session().Options.MaxAge
+		if age == 0 {
+			age = store.RedisStore.DefaultMaxAge
+		}
+		_, err := conn.Do("SETEX", openID, age, s.Session().ID)
+		if err != nil {
+			return err
+		}
 	}
-	return nil
+
+	return errors.New("SaveUser store类型错误，应为RedisStore")
 }
 
 // GetByOpenID 通过openID获取session对象
@@ -179,44 +176,53 @@ func SessionsMany(names []string, store sessions.Store) gin.HandlerFunc {
 	}
 }
 
+// ID 获取gs.Session的ID
 func (s *Session) ID() string {
 	return s.Session().ID
 }
 
+// Get 获取gs.Session中的Values字段的map中key对应的数据
 func (s *Session) Get(key interface{}) interface{} {
 	return s.Session().Values[key]
 }
 
+// Set  设置gs.Session中的Values字段的map中key对应的数据
 func (s *Session) Set(key interface{}, val interface{}) {
 	s.Session().Values[key] = val
 	s.written = true
 }
 
+// Delete 删除gs.Session中的Values字段的map中key对应的数据
 func (s *Session) Delete(key interface{}) {
 	delete(s.Session().Values, key)
 	s.written = true
 }
 
+// Clear 清空gs.Session对象中的字段Values的map
 func (s *Session) Clear() {
 	for key := range s.Session().Values {
 		s.Delete(key)
 	}
 }
 
+// AddFlash 添加一个flash message to session
 func (s *Session) AddFlash(value interface{}, vars ...string) {
 	s.Session().AddFlash(value, vars...)
 	s.written = true
 }
 
+// Flashes 返回全部的flash message in session
 func (s *Session) Flashes(vars ...string) []interface{} {
 	s.written = true
 	return s.Session().Flashes(vars...)
 }
 
+// Options 将store传入的options传给底层session对象
 func (s *Session) Options(options sessions.Options) {
 	s.Session().Options = options.ToGorillaOptions()
 }
 
+// Save 更新gs.Session结构体对象的Values这个字段的map内容并且会更新session在redis数据库中的存活时间，maxage传入的options，当sessionID不存在时，会生成一个新的sessionID
 func (s *Session) Save() error {
 	if s.Written() {
 		e := s.Session().Save(s.request, s.writer)
@@ -228,10 +234,11 @@ func (s *Session) Save() error {
 	return nil
 }
 
+// Session ...
 func (s *Session) Session() *gs.Session {
 	if s.session == nil {
 		var err error
-		s.session, err = s.store.Get(s.request, s.name)
+		s.session, err = s.store.Get(s.request, s.name) //通过http.Request的Header中Cookie信息获取sessionID，如果没有sessionID就新生成一个底层的gs.Session对象
 		if err != nil {
 			log.Printf(errorFormat, err)
 		}
@@ -239,16 +246,17 @@ func (s *Session) Session() *gs.Session {
 	return s.session
 }
 
+// Written ...
 func (s *Session) Written() bool {
 	return s.written
 }
 
-// shortcut to get session
+// Default shortcut to get session
 func Default(c *gin.Context) Sessioner {
 	return c.MustGet(sessions.DefaultKey).(Sessioner)
 }
 
-// shortcut to get session with given name
+// DefaultMany shortcut to get session with given name
 func DefaultMany(c *gin.Context, name string) Sessioner {
 	return c.MustGet(sessions.DefaultKey).(map[string]Sessioner)[name]
 }
