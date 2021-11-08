@@ -47,7 +47,7 @@ func TestIncrStr(t *testing.T) {
 	for _, tt := range tests {
 		fmt.Println("-------------------", "测试开始：", "[i]:", tt.args.i, "[length]:", tt.args.length, "-----------------------")
 		i := tt.args.i
-		ch := time.After((time.Minute) / 2) //设定一个超时时间，当计时到期则退出循环
+		ch := time.After(time.Minute / 2) //设定一个超时时间，当计时到期则退出循环
 		for {
 			got := IncrStr(i, tt.args.length)
 			fmt.Println(got)

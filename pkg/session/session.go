@@ -70,69 +70,72 @@ type Session struct {
 	writer  http.ResponseWriter
 }
 
-// SaveUser 保存用户id到DB
+// SaveUser 绑定用户id和sessionid到DB
 func (s *Session) SaveUser(openID string) error {
 	defer utils.Def()
-	if store, ok := s.store.(*RedisStore); ok {
-		// 用户id信息绑定到session并且存到redis
-		conn := store.RedisStore.Pool.Get()
-		defer conn.Close()
-		if err := conn.Err(); err != nil {
-			return err
-		}
-
-		age := s.Session().Options.MaxAge
-		if age == 0 {
-			age = store.RedisStore.DefaultMaxAge
-		}
-		_, err := conn.Do("SETEX", openID, age, s.Session().ID)
-		if err != nil {
-			return err
-		}
+	store, ok := s.store.(*RedisStore)
+	if !ok {
+		return errors.New("SaveUser store类型错误，应为RedisStore")
 	}
 
-	return errors.New("SaveUser store类型错误，应为RedisStore")
+	// 用户id信息绑定到session并且存到redis
+	conn := store.RedisStore.Pool.Get()
+	defer conn.Close()
+	if err := conn.Err(); err != nil {
+		return err
+	}
+
+	age := s.Session().Options.MaxAge
+	if age == 0 {
+		age = store.RedisStore.DefaultMaxAge
+	}
+
+	if _, err := conn.Do("SETEX", openID, age, s.Session().ID); err != nil {
+		return err
+	}
+	return nil
 }
 
 // GetByOpenID 通过openID获取session对象
 func (s *Session) GetByOpenID(openID string) (*gs.Session, error) {
 	defer utils.Def()
-	if store, ok := s.store.(*RedisStore); ok {
-		conn := store.RedisStore.Pool.Get()
-		defer conn.Close()
-		resp, err := conn.Do("GET", openID)
-		if err != nil {
-			return nil, err
-		}
-		if resp == nil || resp.(string) == "" {
-			return nil, nil // no data was associated with this key
-		}
-
-		sessionID := resp.(string)
-		ss := gs.NewSession(store, s.name)
-		ss.ID = sessionID
-		// 通过sessionID获取session对象
-		data, err := conn.Do("GET", s.KeyPrefix+sessionID)
-		if err != nil {
-			return nil, err
-		}
-		if data == nil {
-			return nil, nil // no data was associated with this key
-		}
-		b, err := redis.Bytes(data, err)
-		if err != nil {
-			return nil, err
-		}
-
-		dec := gob.NewDecoder(bytes.NewBuffer(b))
-		if err := dec.Decode(&ss.Values); err != nil {
-			return nil, err
-		}
-
-		return ss, nil
+	store, ok := s.store.(*RedisStore)
+	if !ok {
+		return nil, errors.New("GetByOpenID store类型错误，应为RedisStore")
 	}
 
-	return nil, errors.New("GetByOpenID store类型错误，应为RedisStore")
+	conn := store.RedisStore.Pool.Get()
+	defer conn.Close()
+	resp, err := conn.Do("GET", openID)
+	if err != nil {
+		return nil, err
+	}
+	if resp == nil || string(resp.([]byte)) == "" {
+		return nil, nil // no data was associated with this key
+	}
+
+	sessionID := string(resp.([]byte))
+
+	// 通过sessionID查询redis中存储的session对象的Values字段map内容
+	data, err := conn.Do("GET", s.KeyPrefix+sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if data == nil {
+		return nil, nil // no data was associated with this key
+	}
+	b, err := redis.Bytes(data, err)
+	if err != nil {
+		return nil, err
+	}
+	ss := gs.NewSession(s.store, s.name)
+	ss.ID = sessionID
+	dec := gob.NewDecoder(bytes.NewBuffer(b))
+	if err := dec.Decode(&ss.Values); err != nil {
+		return nil, err
+	}
+	return ss, nil
+
 }
 
 // DeleteBySessionID 通过sessionID进行删除session对象
@@ -141,15 +144,17 @@ func (s *Session) DeleteBySessionID(session *gs.Session) error {
 	if session == nil || session.ID == "" {
 		return errors.New("Delete(session *gs.Session)方法调用 session对象 入参为空")
 	}
-	if store, ok := s.store.(*RedisStore); ok {
-		conn := store.RedisStore.Pool.Get()
-		defer conn.Close()
-
-		if _, err := conn.Do("DEL", s.KeyPrefix+session.ID); err != nil {
-			return err
-		}
+	store, ok := s.store.(*RedisStore)
+	if !ok {
+		return errors.New("GetByOpenID store类型错误，应为RedisStore")
 	}
 
+	conn := store.RedisStore.Pool.Get()
+	defer conn.Close()
+
+	if _, err := conn.Do("DEL", s.KeyPrefix+session.ID); err != nil {
+		return err
+	}
 	return nil
 }
 
